@@ -7,6 +7,9 @@
 ;;; See:
 ;;; https://www.emacswiki.org/emacs/InstallingPackages
 ;;; for details on how to get use-package to work
+;;;
+;;; Remember to call M-x auto-complete-mode on the YAML buffer
+;;; in order to turn auto-completion on.
 
 (use-package auto-complete)
 (use-package request)
@@ -61,10 +64,17 @@ in order to talk to the live server."
       :headers `(("Authorization" . ,(concat "Bearer " HASS_BEARER_TOKEN))
                  ("Content-Type" . "application/json"))
       :parser 'json-read
-      :complete (cl-function
-                 (lambda (&key data &allow-other-keys)
-                   (setq hass-api-states-json data)
-                   (process-api-states)))))
+      :error (cl-function
+              (lambda (&rest args &key error-thrown &allow-other-keys)
+                (message "Got error: %S" error-thrown)))
+      :success (cl-function
+                (lambda (&key data response &allow-other-keys)
+                  (if (not (eq (request-response-status-code response) 200))
+                      (message "Got error code: %S" (request-response-status-code response))
+                    (setq hass-api-states-json data)
+                    (process-api-states))))
+      :timeout 8
+      ))
 
   (define-key ac-mode-map (kbd "M-'") 'auto-complete)
   (include-dots-in-symbol-syntax-table)
