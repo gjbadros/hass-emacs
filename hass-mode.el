@@ -29,11 +29,21 @@
     (modify-syntax-entry ?. "_")
     (thing-at-point 'symbol)))
 
-(defvar hass-api-states-json)
+(defvar hass-api-states-json '())
 
 (defun hass-setup-completion-from-file (filename)
   (interactive "fAPI States filename: ")
   (hass-setup-completion filename))
+
+(defun process-api-states ()
+  (setq hass-entities
+        (mapcar (lambda (a)
+                  (cdr (assoc 'entity_id a)))
+                hass-api-states-json))
+  (message "Got %S entities" (length hass-entities))
+  (setq ac-user-dictionary hass-entities)
+  (setq ac-sources '(ac-source-dictionary ac-source-words-in-same-mode-buffers))
+  (ac-clear-dictionary-cache))
 
 
 (defun hass-setup-completion (&optional from-file)
@@ -43,25 +53,18 @@ from the server, or put the secrets in the file hass-mode-secrets.el
 in order to talk to the live server."
   (interactive)
   (if from-file
-      (setq hass-api-states-json
-            (json-read-file from-file))
+      (progn
+        (setq hass-api-states-json (json-read-file from-file))
+        (process-api-states))
     (request
       (concat HASS_URL_PREFIX "/api/states")
       :headers `(("Authorization" . ,(concat "Bearer " HASS_BEARER_TOKEN))
                  ("Content-Type" . "application/json"))
       :parser 'json-read
-      :success (cl-function
-                (lambda (&key data &allow-other-keys)
-                  (setq hass-api-states-json data)))))
-          
-  (setq hass-entities
-        (mapcar (lambda (a)
-                  (cdr (assoc 'entity_id a)))
-                hass-api-states-json))
-  (message "Got %S entities" (length hass-entities))
-  (setq ac-user-dictionary hass-entities)
-  (setq ac-sources '(ac-source-dictionary ac-source-words-in-same-mode-buffers))
-  (ac-clear-dictionary-cache)
+      :complete (cl-function
+                 (lambda (&key data &allow-other-keys)
+                   (setq hass-api-states-json data)
+                   (process-api-states)))))
 
   (define-key ac-mode-map (kbd "M-'") 'auto-complete)
   (include-dots-in-symbol-syntax-table)
